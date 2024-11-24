@@ -16,6 +16,7 @@ import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
 import { useCanvasStore } from "../stores/canvasStore";
+import { useSocket } from "../hooks/useSocket";
 
 export const VideoConference = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -25,7 +26,7 @@ export const VideoConference = () => {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
-  const { setRoomId, sendOpenCanvas, receiveCanvasOpen } = useCanvasStore();
+  const { setRoomId, sendOpenCanvas, receiveCanvasOpen } = useSocket();
 
   const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
 
@@ -40,7 +41,7 @@ export const VideoConference = () => {
     const initializeStream = async () => {
       try {
         setRoomId("1234");
-        receiveCanvasOpen((update) => {
+        receiveCanvasOpen(() => {
           if (!isWhiteboardVisible) {
             setShowWhiteboardTooltip(true);
           }

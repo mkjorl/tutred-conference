@@ -1,51 +1,73 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
-import { Play, Download, Upload } from 'lucide-react';
+import { Play, Download, Upload } from "lucide-react";
+import { useSocket } from "../hooks/useSocket";
 
 const languageOptions = [
-  { value: 'javascript', label: 'JavaScript' },
-  { value: 'typescript', label: 'TypeScript' },
-  { value: 'python', label: 'Python' },
-  { value: 'java', label: 'Java' },
-  { value: 'cpp', label: 'C++' },
-  { value: 'csharp', label: 'C#' },
-  { value: 'html', label: 'HTML' },
-  { value: 'css', label: 'CSS' },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "python", label: "Python" },
+  { value: "java", label: "Java" },
+  { value: "cpp", label: "C++" },
+  { value: "csharp", label: "C#" },
+  { value: "html", label: "HTML" },
+  { value: "css", label: "CSS" },
 ];
 
 export const CodeEditor = () => {
-  const [language, setLanguage] = useState('javascript');
-  const [code, setCode] = useState('// Start coding here\n');
+  const [localCode, setLocalCode] = useState<string>("// Start coding here\n");
+  const [localLanguage, setLocalLanguage] = useState<string>("javascript");
+  const [isUploading, setIsUploading] = useState(false);
+  const { sendCodeUpdate, receiveCodeUpdate } = useSocket();
 
-  const handleLanguageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setLanguage(event.target.value);
+  // Listen for remote updates
+  useEffect(() => {
+    receiveCodeUpdate((update) => {
+      setLocalCode(update.code);
+      setLocalLanguage(update.language);
+    });
+  }, [receiveCodeUpdate]);
+
+  const handleLanguageChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const newLanguage = event.target.value;
+    setLocalLanguage(newLanguage);
+    sendCodeUpdate(localCode, newLanguage);
   };
 
   const handleCodeChange = (value: string | undefined) => {
     if (value !== undefined) {
-      setCode(value);
+      setLocalCode(value);
+      sendCodeUpdate(value, localLanguage);
     }
   };
 
   const downloadCode = () => {
-    const blob = new Blob([code], { type: 'text/plain' });
+    const blob = new Blob([localCode], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `code.${language}`;
+    a.download = `code.${localLanguage}`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        setCode(content);
-      };
-      reader.readAsText(file);
+      setIsUploading(true);
+      try {
+        const content = await file.text();
+        setLocalCode(content);
+        sendCodeUpdate(content, localLanguage);
+      } catch (error) {
+        console.error("Error reading file:", error);
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -54,7 +76,7 @@ export const CodeEditor = () => {
       <div className="p-2 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <select
-            value={language}
+            value={localLanguage}
             onChange={handleLanguageChange}
             className="px-2 py-1 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -64,15 +86,20 @@ export const CodeEditor = () => {
               </option>
             ))}
           </select>
-          
+
           <div className="flex space-x-1">
-            <label className="cursor-pointer p-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors">
+            <label
+              className={`cursor-pointer p-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors ${
+                isUploading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+            >
               <Upload size={16} />
               <input
                 type="file"
                 onChange={handleFileUpload}
                 className="hidden"
                 accept=".js,.ts,.py,.java,.cpp,.cs,.html,.css,.txt"
+                disabled={isUploading}
               />
             </label>
             <button
@@ -90,14 +117,14 @@ export const CodeEditor = () => {
         <Editor
           height="100%"
           defaultLanguage="javascript"
-          language={language}
-          value={code}
+          language={localLanguage}
+          value={localCode}
           onChange={handleCodeChange}
           theme="vs-dark"
           options={{
             minimap: { enabled: false },
             fontSize: 14,
-            wordWrap: 'on',
+            wordWrap: "on",
             automaticLayout: true,
             tabSize: 2,
             scrollBeyondLastLine: false,
