@@ -1,15 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { fabric } from 'fabric';
-import { Undo2, Redo2, Eraser, Pencil, Square, Circle, Type, Download, Trash2 } from 'lucide-react';
+import { Undo2, Redo2, Eraser, Pencil, Square, Circle, Type, Download, Trash2, Wifi, WifiOff, X } from 'lucide-react';
 import { useWhiteboardStore } from '../stores/whiteboardStore';
 import { useNotesStore } from '../stores/notesStore';
+import { useCanvasStore } from '../stores/canvasStore';
+import { useUIStore } from '../stores/uiStore';
 import { ColorPicker } from './ColorPicker';
 
 export const Whiteboard = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<fabric.Canvas | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const updateTimeoutRef = useRef<NodeJS.Timeout>();
   const { addNote } = useNotesStore();
+  const { isConnected, sendCanvasUpdate, receiveCanvasUpdate } = useCanvasStore();
+  const { toggleWhiteboard } = useUIStore();
   
   const {
     tool,
@@ -25,6 +31,19 @@ export const Whiteboard = () => {
     canRedo
   } = useWhiteboardStore();
 
+  const debounceCanvasUpdate = (canvas: fabric.Canvas) => {
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+
+    updateTimeoutRef.current = setTimeout(() => {
+      if (!isUpdating) {
+        sendCanvasUpdate(canvas.toJSON());
+        addToHistory(JSON.stringify(canvas.toJSON()));
+      }
+    }, 100);
+  };
+
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -39,18 +58,23 @@ export const Whiteboard = () => {
     canvas.freeDrawingBrush.width = strokeWidth;
     canvas.freeDrawingBrush.color = tool === 'eraser' ? '#ffffff' : color;
 
-    addToHistory(JSON.stringify(canvas.toJSON()));
+    const handleObjectModified = () => {
+      debounceCanvasUpdate(canvas);
+    };
 
-    canvas.on('object:added', () => {
-      addToHistory(JSON.stringify(canvas.toJSON()));
-    });
+    const handlePathCreated = () => {
+      debounceCanvasUpdate(canvas);
+    };
 
-    canvas.on('object:modified', () => {
-      addToHistory(JSON.stringify(canvas.toJSON()));
-    });
+    canvas.on('object:modified', handleObjectModified);
+    canvas.on('path:created', handlePathCreated);
 
-    canvas.on('object:removed', () => {
-      addToHistory(JSON.stringify(canvas.toJSON()));
+    receiveCanvasUpdate((update) => {
+      setIsUpdating(true);
+      canvas.loadFromJSON(update.data, () => {
+        canvas.renderAll();
+        setTimeout(() => setIsUpdating(false), 100);
+      });
     });
 
     const handleResize = () => {
@@ -62,8 +86,14 @@ export const Whiteboard = () => {
     };
 
     window.addEventListener('resize', handleResize);
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      canvas.off('object:modified', handleObjectModified);
+      canvas.off('path:created', handlePathCreated);
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
       canvas.dispose();
     };
   }, []);
@@ -77,37 +107,43 @@ export const Whiteboard = () => {
   }, [tool, color, strokeWidth]);
 
   const handleUndo = () => {
-    if (!fabricRef.current) return;
+    if (!fabricRef.current || isUpdating) return;
     const canvas = fabricRef.current;
     
     const previousState = undo();
     if (previousState) {
+      setIsUpdating(true);
       canvas.loadFromJSON(previousState, () => {
         canvas.renderAll();
         canvas.isDrawingMode = tool === 'pencil' || tool === 'eraser';
         canvas.freeDrawingBrush.width = strokeWidth;
         canvas.freeDrawingBrush.color = tool === 'eraser' ? '#ffffff' : color;
+        sendCanvasUpdate(canvas.toJSON());
+        setTimeout(() => setIsUpdating(false), 100);
       });
     }
   };
 
   const handleRedo = () => {
-    if (!fabricRef.current) return;
+    if (!fabricRef.current || isUpdating) return;
     const canvas = fabricRef.current;
     
     const nextState = redo();
     if (nextState) {
+      setIsUpdating(true);
       canvas.loadFromJSON(nextState, () => {
         canvas.renderAll();
         canvas.isDrawingMode = tool === 'pencil' || tool === 'eraser';
         canvas.freeDrawingBrush.width = strokeWidth;
         canvas.freeDrawingBrush.color = tool === 'eraser' ? '#ffffff' : color;
+        sendCanvasUpdate(canvas.toJSON());
+        setTimeout(() => setIsUpdating(false), 100);
       });
     }
   };
 
   const addShape = (shapeType: 'rect' | 'circle') => {
-    if (!fabricRef.current) return;
+    if (!fabricRef.current || isUpdating) return;
     const canvas = fabricRef.current;
 
     const shape = shapeType === 'rect'
@@ -128,10 +164,11 @@ export const Whiteboard = () => {
     canvas.add(shape);
     shape.center();
     canvas.setActiveObject(shape);
+    debounceCanvasUpdate(canvas);
   };
 
   const addText = () => {
-    if (!fabricRef.current) return;
+    if (!fabricRef.current || isUpdating) return;
     const canvas = fabricRef.current;
 
     const text = new fabric.IText('Click to edit', {
@@ -142,13 +179,15 @@ export const Whiteboard = () => {
     canvas.add(text);
     text.center();
     canvas.setActiveObject(text);
+    debounceCanvasUpdate(canvas);
   };
 
   const clearCanvas = () => {
-    if (!fabricRef.current) return;
-    fabricRef.current.clear();
-    fabricRef.current.backgroundColor = '#ffffff';
-    addToHistory(JSON.stringify(fabricRef.current.toJSON()));
+    if (!fabricRef.current || isUpdating) return;
+    const canvas = fabricRef.current;
+    canvas.clear();
+    canvas.backgroundColor = '#ffffff';
+    debounceCanvasUpdate(canvas);
   };
 
   const saveToImage = () => {
@@ -172,7 +211,7 @@ export const Whiteboard = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleUndo}
-            disabled={!canUndo()}
+            disabled={!canUndo() || isUpdating}
             className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Undo"
           >
@@ -181,7 +220,7 @@ export const Whiteboard = () => {
           
           <button
             onClick={handleRedo}
-            disabled={!canRedo()}
+            disabled={!canRedo() || isUpdating}
             className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Redo"
           >
@@ -192,11 +231,12 @@ export const Whiteboard = () => {
           
           <button
             onClick={() => setTool('pencil')}
+            disabled={isUpdating}
             className={`p-2 rounded-lg ${
               tool === 'pencil'
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-            } transition-colors`}
+            } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             title="Pencil"
           >
             <Pencil size={20} />
@@ -204,11 +244,12 @@ export const Whiteboard = () => {
           
           <button
             onClick={() => setTool('eraser')}
+            disabled={isUpdating}
             className={`p-2 rounded-lg ${
               tool === 'eraser'
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-            } transition-colors`}
+            } transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             title="Eraser"
           >
             <Eraser size={20} />
@@ -216,7 +257,8 @@ export const Whiteboard = () => {
           
           <button
             onClick={() => addShape('rect')}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            disabled={isUpdating}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Add Rectangle"
           >
             <Square size={20} />
@@ -224,7 +266,8 @@ export const Whiteboard = () => {
           
           <button
             onClick={() => addShape('circle')}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            disabled={isUpdating}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Add Circle"
           >
             <Circle size={20} />
@@ -232,7 +275,8 @@ export const Whiteboard = () => {
           
           <button
             onClick={addText}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            disabled={isUpdating}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Add Text"
           >
             <Type size={20} />
@@ -243,7 +287,8 @@ export const Whiteboard = () => {
           <div className="relative">
             <button
               onClick={() => setShowColorPicker(!showColorPicker)}
-              className="w-8 h-8 rounded-lg border-2 border-gray-300"
+              disabled={isUpdating}
+              className="w-8 h-8 rounded-lg border-2 border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: color }}
               title="Color Picker"
             />
@@ -264,12 +309,27 @@ export const Whiteboard = () => {
             max="20"
             value={strokeWidth}
             onChange={(e) => setStrokeWidth(parseInt(e.target.value))}
-            className="w-32"
+            disabled={isUpdating}
+            className="w-32 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Stroke Width"
           />
         </div>
         
         <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-gray-100">
+            {isConnected ? (
+              <>
+                <Wifi size={16} className="text-green-500" />
+                <span className="text-sm text-green-500">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff size={16} className="text-red-500" />
+                <span className="text-sm text-red-500">Disconnected</span>
+              </>
+            )}
+          </div>
+          
           <button
             onClick={saveToImage}
             className="p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
@@ -280,10 +340,19 @@ export const Whiteboard = () => {
           
           <button
             onClick={clearCanvas}
-            className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
+            disabled={isUpdating}
+            className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Clear Canvas"
           >
             <Trash2 size={20} />
+          </button>
+
+          <button
+            onClick={toggleWhiteboard}
+            className="p-2 rounded-lg bg-gray-500 text-white hover:bg-gray-600 transition-colors"
+            title="Close Whiteboard"
+          >
+            <X size={20} />
           </button>
         </div>
       </div>

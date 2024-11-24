@@ -14,6 +14,7 @@ import { useVideoStore } from '../stores/videoStore';
 import { useUIStore } from '../stores/uiStore';
 import { DraggableVideo } from './DraggableVideo';
 import { ScreenRecorder } from './ScreenRecorder';
+import { Tooltip } from './Tooltip';
 
 export const VideoConference = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -22,6 +23,7 @@ export const VideoConference = () => {
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
   
   const { 
     isVideoOn, 
@@ -89,6 +91,13 @@ export const VideoConference = () => {
         console.error('Error sharing screen:', err);
       }
     }
+  };
+
+  const handleWhiteboardToggle = () => {
+    if (!isWhiteboardVisible) {
+      setShowWhiteboardTooltip(true);
+    }
+    toggleWhiteboard();
   };
 
   return (
@@ -180,15 +189,20 @@ export const VideoConference = () => {
             <CircleDot size={20} />
           </button>
           
-          <button
-            onClick={toggleWhiteboard}
-            className={`p-3 rounded-lg ${
-              isWhiteboardVisible ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-600 hover:bg-gray-700'
-            } text-white transition-colors`}
-            title="Toggle Whiteboard"
+          <Tooltip 
+            content="Canvas session started! Start collaborating with your student."
+            show={showWhiteboardTooltip}
           >
-            <Pencil size={20} />
-          </button>
+            <button
+              onClick={handleWhiteboardToggle}
+              className={`p-3 rounded-lg ${
+                isWhiteboardVisible ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-600 hover:bg-gray-700'
+              } text-white transition-colors`}
+              title="Toggle Whiteboard"
+            >
+              <Pencil size={20} />
+            </button>
+          </Tooltip>
           
           <button
             onClick={toggleCodeEditor}
