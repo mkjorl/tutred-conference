@@ -1,5 +1,5 @@
-import create from 'zustand';
-import { socketService } from '../services/socketService';
+import create from "zustand";
+import { socketService } from "../services/socketService";
 
 interface CanvasUpdate {
   data: any;
@@ -15,6 +15,8 @@ interface CanvasState {
   setRoomId: (id: string) => void;
   sendCanvasUpdate: (data: any) => void;
   receiveCanvasUpdate: (callback: (update: CanvasUpdate) => void) => void;
+  sendOpenCanvas: () => void;
+  receiveCanvasOpen: (callback: (update: CanvasUpdate) => void) => void;
   disconnect: () => void;
 }
 
@@ -28,11 +30,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ roomId: id });
     const socket = socketService.connect(id);
 
-    socket?.on('connect', () => {
+    socket?.on("connect", () => {
       set({ isConnected: true });
     });
 
-    socket?.on('disconnect', () => {
+    socket?.on("disconnect", () => {
       set({ isConnected: false });
     });
   },
@@ -43,14 +45,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const update: CanvasUpdate = {
         data,
         timestamp: new Date().toISOString(),
-        sender: get().clientId
+        sender: get().clientId,
       };
-      
-      socket.emit('canvas:update', {
+
+      socket.emit("canvas:update", {
         roomId: get().roomId,
-        ...update
+        ...update,
       });
-      
+
       set({ lastUpdate: update.timestamp });
     }
   },
@@ -58,7 +60,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   receiveCanvasUpdate: (callback: (update: CanvasUpdate) => void) => {
     const socket = socketService.getSocket();
     if (socket) {
-      socket.on('canvas:update', (update: CanvasUpdate) => {
+      socket.on("canvas:update", (update: CanvasUpdate) => {
         if (update.sender !== get().clientId) {
           callback(update);
           set({ lastUpdate: update.timestamp });
@@ -67,8 +69,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
   },
 
+  sendOpenCanvas: () => {
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.emit("canvas:open", {
+        roomId: get().roomId,
+      });
+    }
+  },
+  receiveCanvasOpen: (callback: (update: CanvasUpdate) => void) => {
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.on("canvas:open", (update: CanvasUpdate) => {
+        if (update.sender !== get().clientId) {
+          callback(update);
+        }
+      });
+    }
+  },
+
   disconnect: () => {
     socketService.disconnect();
     set({ isConnected: false, roomId: null });
-  }
+  },
 }));

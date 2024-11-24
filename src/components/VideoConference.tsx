@@ -1,53 +1,56 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Mic, 
-  MicOff, 
-  Video as VideoIcon, 
-  VideoOff, 
-  Pencil, 
-  Code, 
+import React, { useEffect, useState } from "react";
+import {
+  Mic,
+  MicOff,
+  Video as VideoIcon,
+  VideoOff,
+  Pencil,
+  Code,
   Monitor,
   MonitorOff,
   CircleDot,
-} from 'lucide-react';
-import { useVideoStore } from '../stores/videoStore';
-import { useUIStore } from '../stores/uiStore';
-import { DraggableVideo } from './DraggableVideo';
-import { ScreenRecorder } from './ScreenRecorder';
-import { Tooltip } from './Tooltip';
+} from "lucide-react";
+import { useVideoStore } from "../stores/videoStore";
+import { useUIStore } from "../stores/uiStore";
+import { DraggableVideo } from "./DraggableVideo";
+import { ScreenRecorder } from "./ScreenRecorder";
+import { Tooltip } from "./Tooltip";
+import { useCanvasStore } from "../stores/canvasStore";
 
 export const VideoConference = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [permissionError, setPermissionError] = useState<string>('');
+  const [permissionError, setPermissionError] = useState<string>("");
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
-  
-  const { 
-    isVideoOn, 
-    isAudioOn, 
-    toggleVideo, 
-    toggleAudio,
-  } = useVideoStore();
-  
-  const { 
-    isWhiteboardVisible, 
-    toggleWhiteboard, 
-    isCodeEditorVisible, 
-    toggleCodeEditor 
+  const { setRoomId, sendOpenCanvas, receiveCanvasOpen } = useCanvasStore();
+
+  const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
+
+  const {
+    isWhiteboardVisible,
+    toggleWhiteboard,
+    isCodeEditorVisible,
+    toggleCodeEditor,
   } = useUIStore();
 
   useEffect(() => {
     const initializeStream = async () => {
       try {
+        setRoomId("1234");
+        receiveCanvasOpen((update) => {
+          if (!isWhiteboardVisible) {
+            setShowWhiteboardTooltip(true);
+          }
+        });
         const stream = await navigator.mediaDevices.getUserMedia({
           video: isVideoOn,
           audio: isAudioOn,
         });
         setLocalStream(stream);
-        setPermissionError('');
+        setPermissionError("");
 
         // Simulate remote stream for demo purposes
         // In production, this would come from WebRTC connection
@@ -57,8 +60,10 @@ export const VideoConference = () => {
         });
         setRemoteStream(fakeRemoteStream);
       } catch (err) {
-        console.error('Error accessing media devices:', err);
-        setPermissionError('Please enable camera and microphone access to use video conferencing.');
+        console.error("Error accessing media devices:", err);
+        setPermissionError(
+          "Please enable camera and microphone access to use video conferencing."
+        );
       }
     };
 
@@ -66,37 +71,37 @@ export const VideoConference = () => {
 
     return () => {
       if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach((track) => track.stop());
       }
       if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop());
+        screenStream.getTracks().forEach((track) => track.stop());
       }
       if (remoteStream) {
-        remoteStream.getTracks().forEach(track => track.stop());
+        remoteStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [isVideoOn, isAudioOn]);
+  }, [isVideoOn, isAudioOn, isWhiteboardVisible]);
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      screenStream?.getTracks().forEach(track => track.stop());
+      screenStream?.getTracks().forEach((track) => track.stop());
       setScreenStream(null);
       setIsScreenSharing(false);
     } else {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+        });
         setScreenStream(stream);
         setIsScreenSharing(true);
       } catch (err) {
-        console.error('Error sharing screen:', err);
+        console.error("Error sharing screen:", err);
       }
     }
   };
 
   const handleWhiteboardToggle = () => {
-    if (!isWhiteboardVisible) {
-      setShowWhiteboardTooltip(true);
-    }
+    sendOpenCanvas();
     toggleWhiteboard();
   };
 
@@ -112,13 +117,15 @@ export const VideoConference = () => {
               muted
               ref={(video) => {
                 if (video && (isScreenSharing ? screenStream : localStream)) {
-                  video.srcObject = isScreenSharing ? screenStream : localStream;
+                  video.srcObject = isScreenSharing
+                    ? screenStream
+                    : localStream;
                 }
               }}
               className="w-full h-full object-cover"
             />
             <div className="absolute bottom-4 left-4 text-white bg-black/50 px-3 py-1 rounded-full text-sm">
-              {isScreenSharing ? 'Screen Share' : 'You (Tutor)'}
+              {isScreenSharing ? "Screen Share" : "You (Tutor)"}
             </div>
           </div>
 
@@ -154,33 +161,39 @@ export const VideoConference = () => {
           <button
             onClick={toggleAudio}
             className={`p-3 rounded-lg ${
-              isAudioOn ? 'bg-blue-500 hover:bg-blue-600' : 'bg-red-500 hover:bg-red-600'
+              isAudioOn
+                ? "bg-blue-500 hover:bg-blue-600"
+                : "bg-red-500 hover:bg-red-600"
             } text-white transition-colors`}
-            title={isAudioOn ? 'Mute' : 'Unmute'}
+            title={isAudioOn ? "Mute" : "Unmute"}
           >
             {isAudioOn ? <Mic size={20} /> : <MicOff size={20} />}
           </button>
-          
+
           <button
             onClick={toggleVideo}
             className={`p-3 rounded-lg ${
-              isVideoOn ? 'bg-blue-500 hover:bg-blue-600' : 'bg-red-500 hover:bg-red-600'
+              isVideoOn
+                ? "bg-blue-500 hover:bg-blue-600"
+                : "bg-red-500 hover:bg-red-600"
             } text-white transition-colors`}
-            title={isVideoOn ? 'Stop Video' : 'Start Video'}
+            title={isVideoOn ? "Stop Video" : "Start Video"}
           >
             {isVideoOn ? <VideoIcon size={20} /> : <VideoOff size={20} />}
           </button>
-          
+
           <button
             onClick={toggleScreenShare}
             className={`p-3 rounded-lg ${
-              isScreenSharing ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-600 hover:bg-gray-700'
+              isScreenSharing
+                ? "bg-green-500 hover:bg-green-600"
+                : "bg-gray-600 hover:bg-gray-700"
             } text-white transition-colors`}
-            title={isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+            title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
           >
             {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
           </button>
-          
+
           <button
             onClick={() => setShowRecorder(true)}
             className="p-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white transition-colors"
@@ -188,26 +201,30 @@ export const VideoConference = () => {
           >
             <CircleDot size={20} />
           </button>
-          
-          <Tooltip 
-            content="Canvas session started! Start collaborating with your student."
+
+          <Tooltip
+            content="Canvas session started! Start collaborating."
             show={showWhiteboardTooltip}
           >
             <button
               onClick={handleWhiteboardToggle}
               className={`p-3 rounded-lg ${
-                isWhiteboardVisible ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-600 hover:bg-gray-700'
+                isWhiteboardVisible
+                  ? "bg-green-500 hover:bg-green-600"
+                  : "bg-gray-600 hover:bg-gray-700"
               } text-white transition-colors`}
               title="Toggle Whiteboard"
             >
               <Pencil size={20} />
             </button>
           </Tooltip>
-          
+
           <button
             onClick={toggleCodeEditor}
             className={`p-3 rounded-lg ${
-              isCodeEditorVisible ? 'bg-purple-500 hover:bg-purple-600' : 'bg-gray-600 hover:bg-gray-700'
+              isCodeEditorVisible
+                ? "bg-purple-500 hover:bg-purple-600"
+                : "bg-gray-600 hover:bg-gray-700"
             } text-white transition-colors`}
             title="Toggle Code Editor"
           >
