@@ -50,7 +50,9 @@ export const useSocket = create<SocketState>((set, get) => ({
 
   sendCanvasUpdate: (data: any) => {
     const socket = socketService.getSocket();
+
     if (socket) {
+      console.log("sendCanvasUpdate");
       const update: CanvasUpdate = {
         data,
         timestamp: new Date().toISOString(),
@@ -68,8 +70,10 @@ export const useSocket = create<SocketState>((set, get) => ({
 
   receiveCanvasUpdate: (callback: (update: CanvasUpdate) => void) => {
     const socket = socketService.getSocket();
+    console.log("receving canvas update", socket);
     if (socket) {
       socket.on("canvas:update", (update: CanvasUpdate) => {
+        console.log("receivedCanvasUpdate");
         if (update.sender !== get().clientId) {
           callback(update);
           set({ lastUpdate: update.timestamp });

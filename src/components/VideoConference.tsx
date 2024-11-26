@@ -41,6 +41,7 @@ export const VideoConference = () => {
     const initializeStream = async () => {
       try {
         setRoomId("1234");
+        joinRoom;
         receiveCanvasOpen(() => {
           if (!isWhiteboardVisible) {
             setShowWhiteboardTooltip(true);
