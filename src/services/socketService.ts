@@ -18,7 +18,7 @@ class SocketService {
 
     this.socket = io(
       import.meta.env.VITE_SIGNALING_SERVER ||
-        "ws://tutredstage-266226951372.herokuapp.com",
+        "https://tutredstage-266226951372.herokuapp.com",
       {
         query: { roomId },
         transports: ["websocket"],
