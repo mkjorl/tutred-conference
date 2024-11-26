@@ -27,7 +27,7 @@ export const VideoConference = () => {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
-  const [roomId] = useState(() => crypto.randomUUID());
+  const [roomId] = useState("1234");
 
   const {
     setRoomId: setSocketRoomId,

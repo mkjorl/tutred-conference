@@ -14,7 +14,8 @@ export class WebRTCService {
   constructor(roomId: string) {
     this.device = new Device();
     this.socket = io(
-      import.meta.env.VITE_SIGNALING_SERVER || "http://localhost:5001",
+      import.meta.env.VITE_SIGNALING_SERVER ||
+        "https://tutredstage-266226951372.herokuapp.com:3000",
       {
         query: { roomId },
         transports: ["websocket"],
