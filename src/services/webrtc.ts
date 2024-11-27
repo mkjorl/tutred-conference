@@ -6,22 +6,22 @@ export class WebRTCService {
   private device: Device;
   private socket: Socket;
   private producerTransport: any;
-  private consumerTransports: Map<string, any>;
+  private consumerTransport: any;
   private producers: Map<string, any>;
   private consumers: Map<string, any>;
   private onStreamCallback: ((stream: MediaStream) => void) | null = null;
+  private mediaStream: MediaStream | null = null;
 
   constructor(roomId: string) {
     this.device = new Device();
     this.socket = io(
       import.meta.env.VITE_SIGNALING_SERVER ||
-        "https://tutredstage-266226951372.herokuapp.com:3000",
+        "https://tutredstage-266226951372.herokuapp.com",
       {
         query: { roomId },
         transports: ["websocket"],
       }
     );
-    this.consumerTransports = new Map();
     this.producers = new Map();
     this.consumers = new Map();
 
@@ -44,7 +44,7 @@ export class WebRTCService {
 
     this.socket.on("newProducer", async ({ producerId, producerSocketId }) => {
       if (producerSocketId !== this.socket.id) {
-        await this.connectConsumerTransport(producerId, producerSocketId);
+        await this.consume(producerId);
       }
     });
   }
@@ -70,14 +70,36 @@ export class WebRTCService {
 
           this.producerTransport.on(
             "produce",
-            async (parameters: any, callback: Function) => {
-              this.socket.emit("produce", parameters, (id: string) =>
-                callback(id)
+            async ({ kind, rtpParameters }: any, callback: Function) => {
+              this.socket.emit(
+                "produce",
+                { kind, rtpParameters },
+                (id: string) => callback(id)
               );
             }
           );
 
-          resolve(true);
+          // Initialize consumer transport
+          this.socket.emit("createConsumerTransport", async (data: any) => {
+            if (data.error) {
+              reject(data.error);
+              return;
+            }
+
+            this.consumerTransport = this.device.createRecvTransport(data);
+
+            this.consumerTransport.on(
+              "connect",
+              ({ dtlsParameters }: any, callback: Function) => {
+                this.socket.emit("connectConsumerTransport", {
+                  dtlsParameters,
+                });
+                callback();
+              }
+            );
+
+            resolve(true);
+          });
         } catch (error) {
           reject(error);
         }
@@ -85,14 +107,35 @@ export class WebRTCService {
     });
   }
 
-  private async connectConsumerTransport(
-    producerId: string,
-    producerSocketId: string
-  ) {
-    const stream = new MediaStream();
-    if (this.onStreamCallback) {
-      this.onStreamCallback(stream);
-    }
+  private async consume(producerId: string) {
+    this.socket.emit(
+      "consume",
+      {
+        producerId,
+        rtpCapabilities: this.device.rtpCapabilities,
+      },
+      async ({ id, kind, rtpParameters }: any) => {
+        const consumer = await this.consumerTransport.consume({
+          id,
+          producerId,
+          kind,
+          rtpParameters,
+        });
+
+        this.consumers.set(consumer.id, consumer);
+
+        const track = consumer.track;
+        if (!this.mediaStream) {
+          this.mediaStream = new MediaStream();
+          if (this.onStreamCallback) {
+            this.onStreamCallback(this.mediaStream);
+          }
+        }
+        this.mediaStream.addTrack(track);
+
+        this.socket.emit("resumeConsumer", { consumerId: consumer.id });
+      }
+    );
   }
 
   public async produceStream(stream: MediaStream) {
@@ -103,14 +146,22 @@ export class WebRTCService {
     for (const track of stream.getTracks()) {
       const producer = await this.producerTransport.produce({ track });
       this.producers.set(track.kind, producer);
+
+      producer.on("trackended", () => {
+        producer.close();
+        this.producers.delete(track.kind);
+      });
     }
   }
 
   public close() {
     this.producers.forEach((producer) => producer.close());
     this.consumers.forEach((consumer) => consumer.close());
-    this.consumerTransports.forEach((transport) => transport.close());
     if (this.producerTransport) this.producerTransport.close();
+    if (this.consumerTransport) this.consumerTransport.close();
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+    }
     this.socket.close();
   }
 }

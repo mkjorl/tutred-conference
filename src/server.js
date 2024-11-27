@@ -10,7 +10,6 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-// Configure CORS
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
@@ -18,21 +17,13 @@ app.use(
   })
 );
 
-// Socket.IO setup with CORS and logging
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
   },
-  logger: {
-    debug: (...args) => console.debug("socket.io debug:", ...args),
-    info: (...args) => console.info("socket.io info:", ...args),
-    warn: (...args) => console.warn("socket.io warn:", ...args),
-    error: (...args) => console.error("socket.io error:", ...args),
-  },
 });
 
-// MediaSoup setup
 let worker;
 const rooms = new Map();
 
@@ -85,23 +76,19 @@ const createRoom = async (roomId) => {
   return router;
 };
 
-// Socket.IO event handling
 io.on("connection", async (socket) => {
   const { roomId } = socket.handshake.query;
   console.log("Client connected:", socket.id, "Room:", roomId);
 
   socket.join(roomId);
 
-  // Handle room creation/joining
   if (!rooms.has(roomId)) {
     await createRoom(roomId);
   }
   const room = rooms.get(roomId);
 
-  // Send router RTP capabilities
   socket.emit("routerRtpCapabilities", room.router.rtpCapabilities);
 
-  // Handle transport creation
   socket.on("createProducerTransport", async (callback) => {
     try {
       const transport = await createWebRtcTransport(room.router);
@@ -110,7 +97,24 @@ io.on("connection", async (socket) => {
         producerTransport: transport,
       });
 
-      console.log("transport", transport);
+      callback({
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters,
+      });
+    } catch (err) {
+      callback({ error: err.message });
+    }
+  });
+
+  socket.on("createConsumerTransport", async (callback) => {
+    try {
+      const transport = await createWebRtcTransport(room.router);
+      room.peers.set(socket.id, {
+        ...room.peers.get(socket.id),
+        consumerTransport: transport,
+      });
 
       callback({
         id: transport.id,
@@ -119,12 +123,10 @@ io.on("connection", async (socket) => {
         dtlsParameters: transport.dtlsParameters,
       });
     } catch (err) {
-      console.error("Error creating producer transport:", err);
       callback({ error: err.message });
     }
   });
 
-  // Handle transport connection
   socket.on("connectProducerTransport", async ({ dtlsParameters }) => {
     const peer = room.peers.get(socket.id);
     if (peer?.producerTransport) {
@@ -132,7 +134,13 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // Handle stream production
+  socket.on("connectConsumerTransport", async ({ dtlsParameters }) => {
+    const peer = room.peers.get(socket.id);
+    if (peer?.consumerTransport) {
+      await peer.consumerTransport.connect({ dtlsParameters });
+    }
+  });
+
   socket.on("produce", async ({ kind, rtpParameters }, callback) => {
     const peer = room.peers.get(socket.id);
     if (peer?.producerTransport) {
@@ -143,7 +151,6 @@ io.on("connection", async (socket) => {
       peer.producers = peer.producers || new Map();
       peer.producers.set(kind, producer);
 
-      // Notify other peers about new producer
       socket.to(roomId).emit("newProducer", {
         producerId: producer.id,
         producerSocketId: socket.id,
@@ -153,40 +160,71 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // Handle canvas updates
-  socket.on("canvas:update", (update) => {
-    socket.to(roomId).emit("canvas:update", update);
+  socket.on("consume", async ({ producerId, rtpCapabilities }, callback) => {
+    try {
+      const peer = room.peers.get(socket.id);
+      if (!peer?.consumerTransport) return;
+
+      const consumer = await peer.consumerTransport.consume({
+        producerId,
+        rtpCapabilities,
+        paused: true,
+      });
+
+      peer.consumers = peer.consumers || new Map();
+      peer.consumers.set(consumer.id, consumer);
+
+      callback({
+        id: consumer.id,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+        producerId: producerId,
+      });
+    } catch (err) {
+      console.error("Consume error:", err);
+      callback({ error: err.message });
+    }
   });
 
-  // Handle canvas open events
-  socket.on("canvas:open", (update) => {
-    socket.to(roomId).emit("canvas:open", update);
+  socket.on("resumeConsumer", async ({ consumerId }) => {
+    const peer = room.peers.get(socket.id);
+    const consumer = peer?.consumers?.get(consumerId);
+    if (consumer) {
+      await consumer.resume();
+    }
   });
 
-  // Handle code updates
-  socket.on("code:update", (update) => {
-    socket.to(roomId).emit("code:update", update);
-  });
-
-  // Handle disconnection
   socket.on("disconnect", () => {
     const peer = room.peers.get(socket.id);
     if (peer) {
       peer.producers?.forEach((producer) => producer.close());
+      peer.consumers?.forEach((consumer) => consumer.close());
       peer.producerTransport?.close();
+      peer.consumerTransport?.close();
       room.peers.delete(socket.id);
     }
 
-    // Clean up room if empty
     if (room.peers.size === 0) {
       rooms.delete(roomId);
     }
 
     console.log("Client disconnected:", socket.id);
   });
+
+  // Handle other socket events (canvas, code, etc.)
+  socket.on("canvas:update", (update) => {
+    socket.to(roomId).emit("canvas:update", update);
+  });
+
+  socket.on("canvas:open", (update) => {
+    socket.to(roomId).emit("canvas:open", update);
+  });
+
+  socket.on("code:update", (update) => {
+    socket.to(roomId).emit("code:update", update);
+  });
 });
 
-// Start the server
 const PORT = process.env.PORT || 3000;
 createWorker().then(() => {
   httpServer.listen(PORT, () => {
