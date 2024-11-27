@@ -13,6 +13,7 @@ import {
 import { useVideoStore } from "../stores/videoStore";
 import { useUIStore } from "../stores/uiStore";
 import { useRoomStore } from "../stores/roomStore";
+import { useRemoteStream } from "../hooks/useRemoteStream";
 import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
@@ -21,7 +22,6 @@ import { useSocket } from "../hooks/useSocket";
 
 export const VideoConference = () => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState<string>("");
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -35,6 +35,10 @@ export const VideoConference = () => {
     receiveCanvasOpen,
   } = useSocket();
   const { joinRoom, leaveRoom, produceStream } = useRoomStore();
+  const { remoteStream, error: remoteStreamError } = useRemoteStream(roomId);
+
+  console.log("remoteStream", remoteStream);
+  console.log("localStream", localStream);
 
   const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
   const {
@@ -155,16 +159,23 @@ export const VideoConference = () => {
     toggleWhiteboard();
   };
 
+  const renderError = () => {
+    const errorMessage = permissionError || remoteStreamError;
+    if (!errorMessage) return null;
+
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="bg-red-50 text-red-800 rounded-lg p-4 max-w-md text-center">
+          {errorMessage}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full bg-gray-100">
       <div className="flex-1 relative p-4">
-        {permissionError ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="bg-red-50 text-red-800 rounded-lg p-4 max-w-md text-center">
-              {permissionError}
-            </div>
-          </div>
-        ) : (
+        {renderError() || (
           <div className="relative h-full grid grid-cols-2 gap-4">
             {/* Local Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">

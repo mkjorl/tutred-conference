@@ -73,7 +73,7 @@ export const useSocket = create<SocketState>((set, get) => ({
     console.log("receving canvas update", socket);
     if (socket) {
       socket.on("canvas:update", (update: CanvasUpdate) => {
-        console.log("receivedCanvasUpdate");
+        console.log("receivedCanvasUpdate", update);
         if (update.sender !== get().clientId) {
           callback(update);
           set({ lastUpdate: update.timestamp });
@@ -87,6 +87,7 @@ export const useSocket = create<SocketState>((set, get) => ({
     if (socket) {
       socket.emit("canvas:open", {
         roomId: get().roomId,
+        sender: get().clientId,
       });
     }
   },
@@ -94,6 +95,7 @@ export const useSocket = create<SocketState>((set, get) => ({
     const socket = socketService.getSocket();
     if (socket) {
       socket.on("canvas:open", (update: CanvasUpdate) => {
+        console.log("update", update);
         if (update.sender !== get().clientId) {
           callback(update);
         }
