@@ -213,6 +213,7 @@ export const VideoConference = () => {
       </div>
     );
   };
+
   return (
     <div className="flex flex-col h-full bg-gray-100">
       {room ? (
@@ -228,7 +229,7 @@ export const VideoConference = () => {
               {localTrack ? (
                 <DraggableVideo
                   stream={localTrack || null}
-                  label={`You`}
+                  label={`You (${participantName})`}
                   muted={true}
                 />
               ) : (
