@@ -10,16 +10,8 @@ import {
 import { useVideoStore } from "./videoStore";
 import { useScreenShareStore } from "./screenShareStore";
 
-let APPLICATION_SERVER_URL = "";
-let LIVEKIT_URL = "";
-
-if (window.location.hostname === "localhost") {
-  APPLICATION_SERVER_URL = "http://localhost:3000/";
-  LIVEKIT_URL = "ws://localhost:7880/";
-} else {
-  APPLICATION_SERVER_URL = "https://" + window.location.hostname + ":6443/";
-  LIVEKIT_URL = "wss://" + window.location.hostname + ":7443/";
-}
+let APPLICATION_SERVER_URL = import.meta.env.VITE_SIGNALING_SERVER;
+let LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL;
 
 interface TrackInfo {
   trackPublication: RemoteTrackPublication;
