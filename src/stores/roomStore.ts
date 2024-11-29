@@ -8,6 +8,7 @@ import {
   RemoteParticipant,
 } from "livekit-client";
 import { useVideoStore } from "./videoStore";
+import { useScreenShareStore } from "./screenShareStore";
 
 let APPLICATION_SERVER_URL = "";
 let LIVEKIT_URL = "";
@@ -33,6 +34,9 @@ interface RoomStore {
   isConnecting: boolean;
   joinRoom: (roomName: string, participantName: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
+  toggleVideo: () => Promise<void>;
+  toggleAudio: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
 }
 
 export const useRoomStore = create<RoomStore>((set, get) => ({
@@ -41,6 +45,68 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   remoteTracks: [],
   connectionError: null,
   isConnecting: false,
+
+  toggleVideo: async () => {
+    const { room } = get();
+    const { toggleVideo } = useVideoStore.getState();
+
+    if (room) {
+      try {
+        await room.localParticipant.setCameraEnabled(
+          !room.localParticipant.isCameraEnabled
+        );
+        toggleVideo();
+      } catch (error) {
+        console.error("Error toggling video:", error);
+      }
+    }
+  },
+
+  toggleAudio: async () => {
+    const { room } = get();
+    const { toggleAudio } = useVideoStore.getState();
+
+    if (room) {
+      try {
+        await room.localParticipant.setMicrophoneEnabled(
+          !room.localParticipant.isMicrophoneEnabled
+        );
+        toggleAudio();
+      } catch (error) {
+        console.error("Error toggling audio:", error);
+      }
+    }
+  },
+
+  toggleScreenShare: async () => {
+    const { room } = get();
+    const { setScreenSharing, setScreenTrack } = useScreenShareStore.getState();
+
+    if (!room) return;
+
+    try {
+      const isCurrentlySharing = room.localParticipant.isScreenShareEnabled;
+
+      if (isCurrentlySharing) {
+        await room.localParticipant.setScreenShareEnabled(false);
+        setScreenTrack(null);
+      } else {
+        await room.localParticipant.setScreenShareEnabled(true);
+        const screenTrack = Array.from(
+          room.localParticipant.screenShareTracks.values()
+        )[0];
+        if (screenTrack) {
+          setScreenTrack(screenTrack.track);
+        }
+      }
+
+      setScreenSharing(!isCurrentlySharing);
+    } catch (error) {
+      console.error("Error toggling screen share:", error);
+      setScreenSharing(false);
+      setScreenTrack(null);
+    }
+  },
 
   joinRoom: async (roomName: string, participantName: string) => {
     const room = new Room();
@@ -91,12 +157,21 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
       const { token } = await response.json();
       await room.connect(LIVEKIT_URL, token);
 
-      const { selectedVideoInput, selectedAudioInput } =
+      const { selectedVideoInput, selectedAudioInput, isVideoOn, isAudioOn } =
         useVideoStore.getState();
+
       await room.localParticipant.enableCameraAndMicrophone({
         videoDeviceId: selectedVideoInput,
         audioDeviceId: selectedAudioInput,
       });
+
+      // Set initial video/audio state
+      if (!isVideoOn) {
+        await room.localParticipant.setCameraEnabled(false);
+      }
+      if (!isAudioOn) {
+        await room.localParticipant.setMicrophoneEnabled(false);
+      }
 
       const videoTrack = room.localParticipant.videoTrackPublications
         .values()

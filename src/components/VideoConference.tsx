@@ -13,6 +13,7 @@ import {
 import { useVideoStore } from "../stores/videoStore";
 import { useUIStore } from "../stores/uiStore";
 import { useRoomStore } from "../stores/roomStore";
+import { useScreenShareStore } from "../stores/screenShareStore";
 import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
@@ -28,13 +29,21 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
   roomName,
 }) => {
   const [showRecorder, setShowRecorder] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
 
-  const { room, localTrack, remoteTracks, connectionError, isConnecting } =
-    useRoomStore();
+  const {
+    room,
+    localTrack,
+    remoteTracks,
+    connectionError,
+    isConnecting,
+    toggleVideo,
+    toggleAudio,
+    toggleScreenShare,
+  } = useRoomStore();
 
-  const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
+  const { isVideoOn, isAudioOn } = useVideoStore();
+  const { isScreenSharing } = useScreenShareStore();
 
   const {
     isWhiteboardVisible,
@@ -43,20 +52,16 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
     toggleCodeEditor,
   } = useUIStore();
 
-  const toggleScreenShare = async () => {
-    if (!room) return;
+  const handleToggleVideo = async () => {
+    await toggleVideo();
+  };
 
-    if (isScreenSharing) {
-      await room.localParticipant.setScreenShareEnabled(false);
-      setIsScreenSharing(false);
-    } else {
-      try {
-        await room.localParticipant.setScreenShareEnabled(true);
-        setIsScreenSharing(true);
-      } catch (err) {
-        console.error("Error sharing screen:", err);
-      }
-    }
+  const handleToggleAudio = async () => {
+    await toggleAudio();
+  };
+
+  const handleToggleScreenShare = async () => {
+    await toggleScreenShare();
   };
 
   const renderError = () => {
@@ -127,7 +132,7 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
       <div className="bg-gray-900/90 backdrop-blur-sm p-4 border-t border-gray-800">
         <div className="flex justify-center space-x-4">
           <button
-            onClick={toggleAudio}
+            onClick={handleToggleAudio}
             className={`p-3 rounded-lg ${
               isAudioOn
                 ? "bg-blue-500 hover:bg-blue-600"
@@ -139,7 +144,7 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
           </button>
 
           <button
-            onClick={toggleVideo}
+            onClick={handleToggleVideo}
             className={`p-3 rounded-lg ${
               isVideoOn
                 ? "bg-blue-500 hover:bg-blue-600"
@@ -151,7 +156,7 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
           </button>
 
           <button
-            onClick={toggleScreenShare}
+            onClick={handleToggleScreenShare}
             className={`p-3 rounded-lg ${
               isScreenSharing
                 ? "bg-green-500 hover:bg-green-600"
