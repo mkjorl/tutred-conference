@@ -1,41 +1,44 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useVideoStream } from '../hooks/useVideoStream';
+import React, { useState, useRef, useEffect } from "react";
+import { useVideoStream } from "../hooks/useVideoStream";
+import { LocalVideoTrack, RemoteVideoTrack } from "livekit-client";
 
 interface DraggableVideoProps {
-  stream: MediaStream | null;
+  stream: LocalVideoTrack | RemoteVideoTrack;
   label: string;
   className?: string;
   muted?: boolean;
 }
 
-export const DraggableVideo: React.FC<DraggableVideoProps> = ({ 
-  stream, 
-  label, 
-  className = '',
-  muted = false
+export const DraggableVideo: React.FC<DraggableVideoProps> = ({
+  stream,
+  label,
+  className = "",
+  muted = false,
 }) => {
   const [position, setPosition] = useState({ x: 16, y: 16 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useVideoStream(stream);
+  console.log(stream);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
     setDragStart({
       x: e.clientX - position.x,
-      y: e.clientY - position.y
+      y: e.clientY - position.y,
     });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !containerRef.current) return;
 
-    const parentRect = containerRef.current.parentElement?.getBoundingClientRect();
+    const parentRect =
+      containerRef.current.parentElement?.getBoundingClientRect();
     if (!parentRect) return;
 
     const containerRect = containerRef.current.getBoundingClientRect();
-    
+
     const newX = Math.min(
       Math.max(0, e.clientX - dragStart.x),
       parentRect.width - containerRect.width
@@ -54,11 +57,11 @@ export const DraggableVideo: React.FC<DraggableVideoProps> = ({
 
   useEffect(() => {
     if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove as any);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener("mousemove", handleMouseMove as any);
+      document.addEventListener("mouseup", handleMouseUp);
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove as any);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener("mousemove", handleMouseMove as any);
+        document.removeEventListener("mouseup", handleMouseUp);
       };
     }
   }, [isDragging]);
@@ -69,7 +72,7 @@ export const DraggableVideo: React.FC<DraggableVideoProps> = ({
       className={`absolute cursor-move shadow-lg ${className}`}
       style={{
         transform: `translate(${position.x}px, ${position.y}px)`,
-        transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+        transition: isDragging ? "none" : "transform 0.1s ease-out",
       }}
       onMouseDown={handleMouseDown}
     >

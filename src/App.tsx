@@ -1,9 +1,9 @@
-import React from 'react';
-import { VideoConference } from './components/VideoConference';
-import { Whiteboard } from './components/Whiteboard';
-import { Chat } from './components/Chat';
-import { CodeEditor } from './components/CodeEditor';
-import { useUIStore } from './stores/uiStore';
+import React from "react";
+import { VideoConference } from "./components/VideoConference";
+import { Whiteboard } from "./components/Whiteboard";
+import { Chat } from "./components/Chat";
+import { CodeEditor } from "./components/CodeEditor";
+import { useUIStore } from "./stores/uiStore";
 
 function App() {
   const { isWhiteboardVisible, isCodeEditorVisible } = useUIStore();
@@ -15,7 +15,7 @@ function App() {
           Interactive Tutoring Session
         </h1>
       </header>
-      
+
       <main className="flex-1 grid grid-cols-4 gap-2 p-2 overflow-hidden">
         {/* Main Content Area (3/4 width) */}
         <div className="col-span-3">
@@ -23,20 +23,18 @@ function App() {
             {/* Video Conference */}
             <div
               className={`absolute inset-0 transition-all duration-300 ${
-                isWhiteboardVisible 
-                  ? 'scale-50 origin-top-left translate-x-1/4 translate-y-1/4 opacity-75 hover:opacity-100' 
-                  : 'scale-100'
+                isWhiteboardVisible
+                  ? "scale-50 origin-top-left translate-x-1/4 translate-y-1/4 opacity-75 hover:opacity-100"
+                  : "scale-100"
               }`}
             >
               <VideoConference />
             </div>
-            
+
             {/* Whiteboard */}
             <div
               className={`absolute inset-0 transition-all duration-300 ${
-                isWhiteboardVisible 
-                  ? 'opacity-100 z-10' 
-                  : 'opacity-0 -z-10'
+                isWhiteboardVisible ? "opacity-100 z-10" : "opacity-0 -z-10"
               }`}
             >
               <Whiteboard />
@@ -46,14 +44,18 @@ function App() {
 
         {/* Sidebar */}
         <div className="col-span-1 relative">
-          <div className={`absolute inset-0 transition-all duration-300 ${
-            isCodeEditorVisible ? 'opacity-0 -z-10' : 'opacity-100 z-10'
-          }`}>
+          <div
+            className={`absolute inset-0 transition-all duration-300 ${
+              isCodeEditorVisible ? "opacity-0 -z-10" : "opacity-100 z-10"
+            }`}
+          >
             <Chat />
           </div>
-          <div className={`absolute inset-0 transition-all duration-300 ${
-            isCodeEditorVisible ? 'opacity-100 z-10' : 'opacity-0 -z-10'
-          }`}>
+          <div
+            className={`absolute inset-0 transition-all duration-300 ${
+              isCodeEditorVisible ? "opacity-100 z-10" : "opacity-0 -z-10"
+            }`}
+          >
             <CodeEditor />
           </div>
         </div>

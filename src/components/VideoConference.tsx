@@ -10,37 +10,79 @@ import {
   MonitorOff,
   CircleDot,
 } from "lucide-react";
+import {
+  LocalVideoTrack,
+  RemoteParticipant,
+  RemoteTrack,
+  RemoteTrackPublication,
+  Room,
+  RoomEvent,
+} from "livekit-client";
 import { useVideoStore } from "../stores/videoStore";
 import { useUIStore } from "../stores/uiStore";
-import { useRoomStore } from "../stores/roomStore";
-import { useRemoteStream } from "../hooks/useRemoteStream";
 import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
-import { useCanvasStore } from "../stores/canvasStore";
-import { useSocket } from "../hooks/useSocket";
+import { faker } from "@faker-js/faker";
+
+type TrackInfo = {
+  trackPublication: RemoteTrackPublication;
+  participantIdentity: string;
+};
+
+let APPLICATION_SERVER_URL = "";
+let LIVEKIT_URL = "";
+configureUrls();
+
+function configureUrls() {
+  // If APPLICATION_SERVER_URL is not configured, use default value from OpenVidu Local deployment
+  if (!APPLICATION_SERVER_URL) {
+    if (window.location.hostname === "localhost") {
+      APPLICATION_SERVER_URL = "http://localhost:3000/";
+    } else {
+      APPLICATION_SERVER_URL = "https://" + window.location.hostname + ":6443/";
+    }
+  }
+
+  // If LIVEKIT_URL is not configured, use default value from OpenVidu Local deployment
+  if (!LIVEKIT_URL) {
+    if (window.location.hostname === "localhost") {
+      LIVEKIT_URL = "ws://localhost:7880/";
+    } else {
+      LIVEKIT_URL = "wss://" + window.location.hostname + ":7443/";
+    }
+  }
+}
 
 export const VideoConference = () => {
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [permissionError, setPermissionError] = useState<string>("");
+  const [room, setRoom] = useState<Room | undefined>(undefined);
+  const [localTrack, setLocalTrack] = useState<LocalVideoTrack | undefined>(
+    undefined
+  );
+  const [remoteTracks, setRemoteTracks] = useState<TrackInfo[]>([]);
+
+  const [participantName, setParticipantName] = useState(
+    "Participant" + Math.floor(Math.random() * 100)
+  );
+  const [roomName, setRoomName] = useState("Test Room");
+
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
-  const [roomId] = useState("1234");
 
   const {
-    setRoomId: setSocketRoomId,
-    sendOpenCanvas,
-    receiveCanvasOpen,
-  } = useSocket();
-  const { joinRoom, leaveRoom, produceStream } = useRoomStore();
-  const { remoteStream, error: remoteStreamError } = useRemoteStream(roomId);
+    isVideoOn,
+    isAudioOn,
+    streams,
+    sessionId,
+    connectionError,
+    toggleVideo,
+    toggleAudio,
+    joinSession,
+    leaveSession,
+    publishStream,
+  } = useVideoStore();
 
-  console.log("remoteStream", remoteStream);
-  console.log("localStream", localStream);
-
-  const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
   const {
     isWhiteboardVisible,
     toggleWhiteboard,
@@ -48,105 +90,115 @@ export const VideoConference = () => {
     toggleCodeEditor,
   } = useUIStore();
 
-  useEffect(() => {
-    const initializeConnection = async () => {
-      try {
-        // Set up socket connection
-        setSocketRoomId(roomId);
+  async function joinRoom() {
+    // Initialize a new Room object
+    const room = new Room();
+    setRoom(room);
 
-        // Join WebRTC room
-        await joinRoom(roomId);
+    // Specify the actions when events take place in the room
+    // On every new Track received...
+    room.on(
+      RoomEvent.TrackSubscribed,
+      (
+        _track: RemoteTrack,
+        publication: RemoteTrackPublication,
+        participant: RemoteParticipant
+      ) => {
+        setRemoteTracks((prev) => [
+          ...prev,
+          {
+            trackPublication: publication,
+            participantIdentity: participant.identity,
+          },
+        ]);
+      }
+    );
 
-        // Get media stream
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: isVideoOn,
-          audio: isAudioOn,
-        });
-
-        // Send stream to server
-        await produceStream(stream);
-
-        setLocalStream(stream);
-        setPermissionError("");
-
-        // Listen for whiteboard events
-        receiveCanvasOpen(() => {
-          if (!isWhiteboardVisible) {
-            setShowWhiteboardTooltip(true);
-          }
-        });
-      } catch (err) {
-        console.error("Error initializing connection:", err);
-        setPermissionError(
-          "Failed to connect. Please check your camera and microphone permissions."
+    // On every Track destroyed...
+    room.on(
+      RoomEvent.TrackUnsubscribed,
+      (_track: RemoteTrack, publication: RemoteTrackPublication) => {
+        setRemoteTracks((prev) =>
+          prev.filter(
+            (track) => track.trackPublication.trackSid !== publication.trackSid
+          )
         );
       }
-    };
+    );
 
-    initializeConnection();
+    try {
+      // Get a token from your application server with the room name and participant name
+      const token = await getToken(roomName, participantName);
 
-    return () => {
-      if (localStream) {
-        localStream.getTracks().forEach((track) => track.stop());
-      }
-      if (screenStream) {
-        screenStream.getTracks().forEach((track) => track.stop());
-      }
-      leaveRoom();
-    };
-  }, [roomId]);
+      // Connect to the room with the LiveKit URL and the token
+      await room.connect(LIVEKIT_URL, token);
 
-  // Handle media device changes
+      // Publish your camera and microphone
+      await room.localParticipant.enableCameraAndMicrophone();
+      setLocalTrack(
+        room.localParticipant.videoTrackPublications.values().next().value
+          .videoTrack
+      );
+    } catch (error) {
+      console.log(error);
+      console.log(
+        "There was an error connecting to the room:",
+        (error as Error).message
+      );
+      await leaveRoom();
+    }
+  }
+
   useEffect(() => {
-    const updateStream = async () => {
-      if (!localStream) return;
+    joinRoom();
+  }, []);
 
-      const videoTrack = localStream.getVideoTracks()[0];
-      const audioTrack = localStream.getAudioTracks()[0];
+  async function leaveRoom() {
+    // Leave the room by calling 'disconnect' method over the Room object
+    await room?.disconnect();
 
-      if (videoTrack) {
-        videoTrack.enabled = isVideoOn;
-      }
-      if (audioTrack) {
-        audioTrack.enabled = isAudioOn;
-      }
+    // Reset the state
+    setRoom(undefined);
+    setLocalTrack(undefined);
+    setRemoteTracks([]);
+  }
 
-      // Update server with new stream state
-      await produceStream(localStream);
-    };
+  async function getToken(roomName: string, participantName: string) {
+    const response = await fetch(APPLICATION_SERVER_URL + "get-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        roomName: roomName,
+        participantName: participantName,
+      }),
+    });
 
-    updateStream();
-  }, [isVideoOn, isAudioOn, localStream]);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Failed to get token: ${error.errorMessage}`);
+    }
+
+    const data = await response.json();
+    return data.token;
+  }
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      screenStream?.getTracks().forEach((track) => track.stop());
-      setScreenStream(null);
+      await publishStream();
       setIsScreenSharing(false);
-
-      // Resume camera stream
-      if (localStream) {
-        await produceStream(localStream);
-      }
     } else {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
         });
-
-        // Send screen share stream to server
-        await produceStream(stream);
-
-        setScreenStream(stream);
+        await publishStream();
         setIsScreenSharing(true);
 
-        // Handle stream end (user stops sharing)
-        stream.getVideoTracks()[0].onended = () => {
-          setScreenStream(null);
+        screenStream.getVideoTracks()[0].onended = () => {
+          publishStream();
           setIsScreenSharing(false);
-          if (localStream) {
-            produceStream(localStream);
-          }
         };
       } catch (err) {
         console.error("Error sharing screen:", err);
@@ -154,23 +206,26 @@ export const VideoConference = () => {
     }
   };
 
-  const handleWhiteboardToggle = () => {
-    sendOpenCanvas();
-    toggleWhiteboard();
-  };
-
   const renderError = () => {
-    const errorMessage = permissionError || remoteStreamError;
-    if (!errorMessage) return null;
+    if (!connectionError) return null;
 
     return (
       <div className="h-full flex items-center justify-center">
         <div className="bg-red-50 text-red-800 rounded-lg p-4 max-w-md text-center">
-          {errorMessage}
+          {connectionError}
         </div>
       </div>
     );
   };
+
+  // const localStream = streams.find(
+  //   (stream) => stream.stream?.streamId === sessionId
+  // );
+  // const remoteStreams = streams.filter(
+  //   (stream) => stream.stream?.streamId !== sessionId
+  // );
+
+  console.log(localTrack);
 
   return (
     <div className="flex flex-col h-full bg-gray-100">
@@ -179,47 +234,31 @@ export const VideoConference = () => {
           <div className="relative h-full grid grid-cols-2 gap-4">
             {/* Local Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">
-              <video
-                autoPlay
-                playsInline
-                muted
-                ref={(video) => {
-                  if (video && (isScreenSharing ? screenStream : localStream)) {
-                    video.srcObject = isScreenSharing
-                      ? screenStream
-                      : localStream;
-                  }
-                }}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute bottom-4 left-4 text-white bg-black/50 px-3 py-1 rounded-full text-sm">
-                {isScreenSharing ? "Screen Share" : "You (Tutor)"}
-              </div>
+              {localTrack ? (
+                <DraggableVideo
+                  stream={localTrack || null}
+                  label="You (Tutor)"
+                  muted={true}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-white">
+                  Connecting...
+                </div>
+              )}
             </div>
 
             {/* Remote Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">
-              {remoteStream ? (
-                <video
-                  autoPlay
-                  playsInline
-                  ref={(video) => {
-                    if (video && remoteStream) {
-                      video.srcObject = remoteStream;
-                    }
-                  }}
-                  className="w-full h-full object-cover"
+              {/* {remoteStreams.length > 0 ? (
+                <DraggableVideo
+                  stream={remoteStreams[0].stream?.getMediaStream() || null}
+                  label="Student"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
                   Waiting for student to join...
                 </div>
-              )}
-              {remoteStream && (
-                <div className="absolute bottom-4 left-4 text-white bg-black/50 px-3 py-1 rounded-full text-sm">
-                  Student
-                </div>
-              )}
+              )} */}
             </div>
           </div>
         )}
@@ -284,7 +323,7 @@ export const VideoConference = () => {
             show={showWhiteboardTooltip}
           >
             <button
-              onClick={handleWhiteboardToggle}
+              onClick={toggleWhiteboard}
               className={`p-3 rounded-lg ${
                 isWhiteboardVisible
                   ? "bg-green-500 hover:bg-green-600"
@@ -311,8 +350,8 @@ export const VideoConference = () => {
 
         <div className="mt-4 flex justify-center">
           <div className="bg-gray-800 rounded-lg px-4 py-2 text-gray-300 text-sm flex items-center space-x-2">
-            <span>Room ID:</span>
-            <code className="bg-gray-700 px-2 py-1 rounded">{roomId}</code>
+            <span>Session ID:</span>
+            <code className="bg-gray-700 px-2 py-1 rounded">classroom-1</code>
           </div>
         </div>
       </div>

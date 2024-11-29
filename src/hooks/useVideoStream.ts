@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
+import { LocalVideoTrack, RemoteVideoTrack } from "livekit-client";
 
-export const useVideoStream = (stream: MediaStream | null) => {
+export const useVideoStream = (stream: LocalVideoTrack | RemoteVideoTrack) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+      stream.attach(videoRef.current);
     }
   }, [stream]);
 
