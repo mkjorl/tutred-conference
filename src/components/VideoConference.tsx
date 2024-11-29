@@ -23,7 +23,7 @@ import { useUIStore } from "../stores/uiStore";
 import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
-import { faker } from "@faker-js/faker";
+import AudioComponent from "./AudioTrack";
 
 type TrackInfo = {
   trackPublication: RemoteTrackPublication;
@@ -61,10 +61,8 @@ export const VideoConference = () => {
   );
   const [remoteTracks, setRemoteTracks] = useState<TrackInfo[]>([]);
 
-  const [participantName, setParticipantName] = useState(
-    "Participant" + Math.floor(Math.random() * 100)
-  );
-  const [roomName, setRoomName] = useState("Test Room");
+  const [participantName, setParticipantName] = useState("Tutor");
+  const [roomName, setRoomName] = useState("Classroom-2");
 
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -92,6 +90,7 @@ export const VideoConference = () => {
 
   async function joinRoom() {
     // Initialize a new Room object
+    console.log("joining room");
     const room = new Room();
     setRoom(room);
 
@@ -104,6 +103,7 @@ export const VideoConference = () => {
         publication: RemoteTrackPublication,
         participant: RemoteParticipant
       ) => {
+        console.log("track subscribed", publication);
         setRemoteTracks((prev) => [
           ...prev,
           {
@@ -148,10 +148,6 @@ export const VideoConference = () => {
       await leaveRoom();
     }
   }
-
-  useEffect(() => {
-    joinRoom();
-  }, []);
 
   async function leaveRoom() {
     // Leave the room by calling 'disconnect' method over the Room object
@@ -217,18 +213,13 @@ export const VideoConference = () => {
       </div>
     );
   };
-
-  // const localStream = streams.find(
-  //   (stream) => stream.stream?.streamId === sessionId
-  // );
-  // const remoteStreams = streams.filter(
-  //   (stream) => stream.stream?.streamId !== sessionId
-  // );
-
-  console.log(localTrack);
-
   return (
     <div className="flex flex-col h-full bg-gray-100">
+      {room ? (
+        <button onClick={leaveRoom}>Leave Room</button>
+      ) : (
+        <button onClick={joinRoom}>Join Room</button>
+      )}
       <div className="flex-1 relative p-4">
         {renderError() || (
           <div className="relative h-full grid grid-cols-2 gap-4">
@@ -237,7 +228,7 @@ export const VideoConference = () => {
               {localTrack ? (
                 <DraggableVideo
                   stream={localTrack || null}
-                  label="You (Tutor)"
+                  label={`You`}
                   muted={true}
                 />
               ) : (
@@ -249,16 +240,26 @@ export const VideoConference = () => {
 
             {/* Remote Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">
-              {/* {remoteStreams.length > 0 ? (
-                <DraggableVideo
-                  stream={remoteStreams[0].stream?.getMediaStream() || null}
-                  label="Student"
-                />
+              {remoteTracks.length > 0 ? (
+                remoteTracks.map((track) =>
+                  track.trackPublication.kind === "video" ? (
+                    <DraggableVideo
+                      key={track.trackPublication.trackSid}
+                      stream={track.trackPublication.videoTrack || null}
+                      label={`${track.participantIdentity}`}
+                    />
+                  ) : (
+                    <AudioComponent
+                      key={track.trackPublication.trackSid}
+                      track={track.trackPublication.audioTrack || null}
+                    />
+                  )
+                )
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
                   Waiting for student to join...
                 </div>
-              )} */}
+              )}
             </div>
           </div>
         )}
@@ -351,7 +352,7 @@ export const VideoConference = () => {
         <div className="mt-4 flex justify-center">
           <div className="bg-gray-800 rounded-lg px-4 py-2 text-gray-300 text-sm flex items-center space-x-2">
             <span>Session ID:</span>
-            <code className="bg-gray-700 px-2 py-1 rounded">classroom-1</code>
+            <code className="bg-gray-700 px-2 py-1 rounded">{roomName}</code>
           </div>
         </div>
       </div>
