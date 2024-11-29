@@ -10,76 +10,31 @@ import {
   MonitorOff,
   CircleDot,
 } from "lucide-react";
-import {
-  LocalVideoTrack,
-  RemoteParticipant,
-  RemoteTrack,
-  RemoteTrackPublication,
-  Room,
-  RoomEvent,
-} from "livekit-client";
 import { useVideoStore } from "../stores/videoStore";
 import { useUIStore } from "../stores/uiStore";
+import { useRoomStore } from "../stores/roomStore";
 import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
 import AudioComponent from "./AudioTrack";
 
-type TrackInfo = {
-  trackPublication: RemoteTrackPublication;
-  participantIdentity: string;
-};
-
-let APPLICATION_SERVER_URL = "";
-let LIVEKIT_URL = "";
-configureUrls();
-
-function configureUrls() {
-  // If APPLICATION_SERVER_URL is not configured, use default value from OpenVidu Local deployment
-  if (!APPLICATION_SERVER_URL) {
-    if (window.location.hostname === "localhost") {
-      APPLICATION_SERVER_URL = "http://localhost:3000/";
-    } else {
-      APPLICATION_SERVER_URL = "https://" + window.location.hostname + ":6443/";
-    }
-  }
-
-  // If LIVEKIT_URL is not configured, use default value from OpenVidu Local deployment
-  if (!LIVEKIT_URL) {
-    if (window.location.hostname === "localhost") {
-      LIVEKIT_URL = "ws://localhost:7880/";
-    } else {
-      LIVEKIT_URL = "wss://" + window.location.hostname + ":7443/";
-    }
-  }
+interface VideoConferenceProps {
+  participantName: string;
+  roomName: string;
 }
 
-export const VideoConference = () => {
-  const [room, setRoom] = useState<Room | undefined>(undefined);
-  const [localTrack, setLocalTrack] = useState<LocalVideoTrack | undefined>(
-    undefined
-  );
-  const [remoteTracks, setRemoteTracks] = useState<TrackInfo[]>([]);
-
-  const [participantName, setParticipantName] = useState("Tutor");
-  const [roomName, setRoomName] = useState("Classroom-2");
-
+export const VideoConference: React.FC<VideoConferenceProps> = ({
+  participantName,
+  roomName,
+}) => {
   const [showRecorder, setShowRecorder] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
 
-  const {
-    isVideoOn,
-    isAudioOn,
-    streams,
-    sessionId,
-    connectionError,
-    toggleVideo,
-    toggleAudio,
-    joinSession,
-    leaveSession,
-    publishStream,
-  } = useVideoStore();
+  const { room, localTrack, remoteTracks, connectionError, isConnecting } =
+    useRoomStore();
+
+  const { isVideoOn, isAudioOn, toggleVideo, toggleAudio } = useVideoStore();
 
   const {
     isWhiteboardVisible,
@@ -88,114 +43,16 @@ export const VideoConference = () => {
     toggleCodeEditor,
   } = useUIStore();
 
-  async function joinRoom() {
-    // Initialize a new Room object
-    console.log("joining room");
-    const room = new Room();
-    setRoom(room);
-
-    // Specify the actions when events take place in the room
-    // On every new Track received...
-    room.on(
-      RoomEvent.TrackSubscribed,
-      (
-        _track: RemoteTrack,
-        publication: RemoteTrackPublication,
-        participant: RemoteParticipant
-      ) => {
-        console.log("track subscribed", publication);
-        setRemoteTracks((prev) => [
-          ...prev,
-          {
-            trackPublication: publication,
-            participantIdentity: participant.identity,
-          },
-        ]);
-      }
-    );
-
-    // On every Track destroyed...
-    room.on(
-      RoomEvent.TrackUnsubscribed,
-      (_track: RemoteTrack, publication: RemoteTrackPublication) => {
-        setRemoteTracks((prev) =>
-          prev.filter(
-            (track) => track.trackPublication.trackSid !== publication.trackSid
-          )
-        );
-      }
-    );
-
-    try {
-      // Get a token from your application server with the room name and participant name
-      const token = await getToken(roomName, participantName);
-
-      // Connect to the room with the LiveKit URL and the token
-      await room.connect(LIVEKIT_URL, token);
-
-      // Publish your camera and microphone
-      await room.localParticipant.enableCameraAndMicrophone();
-      setLocalTrack(
-        room.localParticipant.videoTrackPublications.values().next().value
-          .videoTrack
-      );
-    } catch (error) {
-      console.log(error);
-      console.log(
-        "There was an error connecting to the room:",
-        (error as Error).message
-      );
-      await leaveRoom();
-    }
-  }
-
-  async function leaveRoom() {
-    // Leave the room by calling 'disconnect' method over the Room object
-    await room?.disconnect();
-
-    // Reset the state
-    setRoom(undefined);
-    setLocalTrack(undefined);
-    setRemoteTracks([]);
-  }
-
-  async function getToken(roomName: string, participantName: string) {
-    const response = await fetch(APPLICATION_SERVER_URL + "get-token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        roomName: roomName,
-        participantName: participantName,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Failed to get token: ${error.errorMessage}`);
-    }
-
-    const data = await response.json();
-    return data.token;
-  }
-
   const toggleScreenShare = async () => {
+    if (!room) return;
+
     if (isScreenSharing) {
-      await publishStream();
+      await room.localParticipant.setScreenShareEnabled(false);
       setIsScreenSharing(false);
     } else {
       try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-        });
-        await publishStream();
+        await room.localParticipant.setScreenShareEnabled(true);
         setIsScreenSharing(true);
-
-        screenStream.getVideoTracks()[0].onended = () => {
-          publishStream();
-          setIsScreenSharing(false);
-        };
       } catch (err) {
         console.error("Error sharing screen:", err);
       }
@@ -216,49 +73,42 @@ export const VideoConference = () => {
 
   return (
     <div className="flex flex-col h-full bg-gray-100">
-      {room ? (
-        <button onClick={leaveRoom}>Leave Room</button>
-      ) : (
-        <button onClick={joinRoom}>Join Room</button>
-      )}
       <div className="flex-1 relative p-4">
         {renderError() || (
           <div className="relative h-full grid grid-cols-2 gap-4">
-            {/* Local Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">
               {localTrack ? (
                 <DraggableVideo
-                  stream={localTrack || null}
+                  stream={localTrack}
                   label={`You (${participantName})`}
                   muted={true}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
-                  Connecting...
+                  {isConnecting ? "Connecting..." : "Camera Off"}
                 </div>
               )}
             </div>
 
-            {/* Remote Video */}
             <div className="relative bg-gray-800 rounded-lg overflow-hidden">
               {remoteTracks.length > 0 ? (
                 remoteTracks.map((track) =>
                   track.trackPublication.kind === "video" ? (
                     <DraggableVideo
                       key={track.trackPublication.trackSid}
-                      stream={track.trackPublication.videoTrack || null}
-                      label={`${track.participantIdentity}`}
+                      stream={track.trackPublication.videoTrack}
+                      label={track.participantIdentity}
                     />
                   ) : (
                     <AudioComponent
                       key={track.trackPublication.trackSid}
-                      track={track.trackPublication.audioTrack || null}
+                      track={track.trackPublication.audioTrack}
                     />
                   )
                 )
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-white">
-                  Waiting for student to join...
+                  Waiting for others to join...
                 </div>
               )}
             </div>
@@ -352,7 +202,7 @@ export const VideoConference = () => {
 
         <div className="mt-4 flex justify-center">
           <div className="bg-gray-800 rounded-lg px-4 py-2 text-gray-300 text-sm flex items-center space-x-2">
-            <span>Session ID:</span>
+            <span>Room:</span>
             <code className="bg-gray-700 px-2 py-1 rounded">{roomName}</code>
           </div>
         </div>

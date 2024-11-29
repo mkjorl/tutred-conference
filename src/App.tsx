@@ -1,12 +1,29 @@
-import React from "react";
+import React, { useState } from "react";
 import { VideoConference } from "./components/VideoConference";
 import { Whiteboard } from "./components/Whiteboard";
 import { Chat } from "./components/Chat";
 import { CodeEditor } from "./components/CodeEditor";
 import { useUIStore } from "./stores/uiStore";
+import { JoinScreen } from "./components/JoinScreen";
+import { useRoomStore } from "./stores/roomStore";
 
 function App() {
   const { isWhiteboardVisible, isCodeEditorVisible } = useUIStore();
+  const [hasJoined, setHasJoined] = useState(false);
+  const [participantName, setParticipantName] = useState("");
+  const [roomId, setRoomId] = useState("");
+  const { joinRoom } = useRoomStore();
+
+  const handleJoin = (name: string, room: string) => {
+    setParticipantName(name);
+    setRoomId(room);
+    setHasJoined(true);
+    joinRoom(room, name);
+  };
+
+  if (!hasJoined) {
+    return <JoinScreen onJoin={handleJoin} />;
+  }
 
   return (
     <div className="h-screen flex flex-col bg-slate-100 font-poppins">
@@ -17,10 +34,8 @@ function App() {
       </header>
 
       <main className="flex-1 grid grid-cols-4 gap-2 p-2 overflow-hidden">
-        {/* Main Content Area (3/4 width) */}
         <div className="col-span-3">
           <div className="relative h-full">
-            {/* Video Conference */}
             <div
               className={`absolute inset-0 transition-all duration-300 ${
                 isWhiteboardVisible
@@ -28,10 +43,12 @@ function App() {
                   : "scale-100"
               }`}
             >
-              <VideoConference />
+              <VideoConference
+                participantName={participantName}
+                roomName={roomId}
+              />
             </div>
 
-            {/* Whiteboard */}
             <div
               className={`absolute inset-0 transition-all duration-300 ${
                 isWhiteboardVisible ? "opacity-100 z-10" : "opacity-0 -z-10"
@@ -42,7 +59,6 @@ function App() {
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="col-span-1 relative">
           <div
             className={`absolute inset-0 transition-all duration-300 ${
