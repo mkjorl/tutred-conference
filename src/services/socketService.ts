@@ -17,8 +17,7 @@ class SocketService {
     if (this.socket?.connected) return;
 
     this.socket = io(
-      import.meta.env.VITE_SIGNALING_SERVER ||
-        "https://tutredstage-266226951372.herokuapp.com",
+      import.meta.env.VITE_SIGNALING_SERVER || "http://localhost:8000",
       {
         query: { roomId },
         transports: ["websocket"],

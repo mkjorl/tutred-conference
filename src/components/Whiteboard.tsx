@@ -110,7 +110,7 @@ export const Whiteboard = () => {
       }
       canvas.dispose();
     };
-  }, []);
+  }, [isConnected, sendCanvasUpdate, receiveCanvasUpdate]);
 
   useEffect(() => {
     if (!fabricRef.current) return;

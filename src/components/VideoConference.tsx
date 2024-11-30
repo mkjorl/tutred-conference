@@ -18,6 +18,7 @@ import { DraggableVideo } from "./DraggableVideo";
 import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
 import AudioComponent from "./AudioTrack";
+import { useCanvasStore } from "../stores/canvasStore";
 
 interface VideoConferenceProps {
   participantName: string;
@@ -51,6 +52,16 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
     isCodeEditorVisible,
     toggleCodeEditor,
   } = useUIStore();
+
+  const { receiveCanvasOpen } = useCanvasStore();
+
+  useEffect(() => {
+    receiveCanvasOpen(() => {
+      if (!isWhiteboardVisible) {
+        setShowWhiteboardTooltip(true);
+      }
+    });
+  }, [receiveCanvasOpen]);
 
   const handleToggleVideo = async () => {
     await toggleVideo();

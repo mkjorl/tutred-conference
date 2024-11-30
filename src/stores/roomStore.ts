@@ -9,6 +9,7 @@ import {
 } from "livekit-client";
 import { useVideoStore } from "./videoStore";
 import { useScreenShareStore } from "./screenShareStore";
+import { useSocket } from "../hooks/useSocket";
 
 let APPLICATION_SERVER_URL = import.meta.env.VITE_SIGNALING_SERVER;
 let LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL;
@@ -103,6 +104,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   joinRoom: async (roomName: string, participantName: string) => {
     const room = new Room();
     set({ isConnecting: true, connectionError: null });
+    const { setRoomId } = useSocket.getState();
 
     room.on(
       RoomEvent.TrackSubscribed,
@@ -135,7 +137,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
     );
 
     try {
-      const response = await fetch(APPLICATION_SERVER_URL + "get-token", {
+      const response = await fetch(APPLICATION_SERVER_URL + "/api/get-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomName, participantName }),
@@ -148,6 +150,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
 
       const { token } = await response.json();
       await room.connect(LIVEKIT_URL, token);
+      setRoomId(roomName);
 
       const { selectedVideoInput, selectedAudioInput, isVideoOn, isAudioOn } =
         useVideoStore.getState();
