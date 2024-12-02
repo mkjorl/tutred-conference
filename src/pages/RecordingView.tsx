@@ -1,15 +1,9 @@
-import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  OpenVidu,
-  Session,
-  StreamManager,
-  Publisher,
-  Subscriber,
-} from "openvidu-browser";
-import { VideoPlayer } from "../components/recording/VideoPlayer";
+
+VideoPlayer;
 import { useRecordingSession } from "../hooks/useRecordingSession";
 import { AlertCircle } from "lucide-react";
+import { VideoPlayer } from "../components/recording/VideoPlayer";
 
 export const RecordingView = () => {
   const { sessionName } = useParams();
