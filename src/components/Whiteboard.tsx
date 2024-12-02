@@ -52,13 +52,14 @@ export const Whiteboard = () => {
 
     updateTimeoutRef.current = setTimeout(() => {
       if (!isUpdating) {
-        sendCanvasUpdate(canvas.toJSON());
-        addToHistory(JSON.stringify(canvas.toJSON()));
+        const canvasData = canvas.toJSON();
+        sendCanvasUpdate(canvasData);
+        addToHistory(JSON.stringify(canvasData));
       }
     }, 100);
   };
 
-  useEffect(() => {
+  const initializeCanvas = () => {
     if (!canvasRef.current) return;
 
     fabricRef.current = new fabric.Canvas(canvasRef.current, {
@@ -72,6 +73,10 @@ export const Whiteboard = () => {
     canvas.freeDrawingBrush.width = strokeWidth;
     canvas.freeDrawingBrush.color = tool === "eraser" ? "#ffffff" : color;
 
+    return canvas;
+  };
+
+  const setupCanvasEventListeners = (canvas: fabric.Canvas) => {
     const handleObjectModified = () => {
       debounceCanvasUpdate(canvas);
     };
@@ -83,13 +88,37 @@ export const Whiteboard = () => {
     canvas.on("object:modified", handleObjectModified);
     canvas.on("path:created", handlePathCreated);
 
+    return () => {
+      canvas.off("object:modified", handleObjectModified);
+      canvas.off("path:created", handlePathCreated);
+    };
+  };
+
+  useEffect(() => {
+    const canvas = initializeCanvas();
+    if (!canvas) return;
+
+    const cleanupEventListeners = setupCanvasEventListeners(canvas);
+
     receiveCanvasUpdate((update) => {
+      if (!fabricRef.current) return;
+
       setIsUpdating(true);
-      console.log("received CanvasUpdate", update);
-      canvas.loadFromJSON(update.data, () => {
-        canvas.renderAll();
-        setTimeout(() => setIsUpdating(false), 100);
-      });
+      try {
+        fabricRef.current.loadFromJSON(update.data, () => {
+          fabricRef.current?.renderAll();
+          // Restore canvas settings after update
+          fabricRef.current!.isDrawingMode =
+            tool === "pencil" || tool === "eraser";
+          fabricRef.current!.freeDrawingBrush.width = strokeWidth;
+          fabricRef.current!.freeDrawingBrush.color =
+            tool === "eraser" ? "#ffffff" : color;
+          setTimeout(() => setIsUpdating(false), 100);
+        });
+      } catch (error) {
+        console.error("Error updating canvas:", error);
+        setIsUpdating(false);
+      }
     });
 
     const handleResize = () => {
@@ -98,14 +127,14 @@ export const Whiteboard = () => {
         width: window.innerWidth * 0.7,
         height: window.innerHeight * 0.6,
       });
+      fabricRef.current.renderAll();
     };
 
     window.addEventListener("resize", handleResize);
 
     return () => {
+      cleanupEventListeners();
       window.removeEventListener("resize", handleResize);
-      canvas.off("object:modified", handleObjectModified);
-      canvas.off("path:created", handlePathCreated);
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current);
       }
@@ -128,14 +157,19 @@ export const Whiteboard = () => {
     const previousState = undo();
     if (previousState) {
       setIsUpdating(true);
-      canvas.loadFromJSON(previousState, () => {
-        canvas.renderAll();
-        canvas.isDrawingMode = tool === "pencil" || tool === "eraser";
-        canvas.freeDrawingBrush.width = strokeWidth;
-        canvas.freeDrawingBrush.color = tool === "eraser" ? "#ffffff" : color;
-        sendCanvasUpdate(canvas.toJSON());
-        setTimeout(() => setIsUpdating(false), 100);
-      });
+      try {
+        canvas.loadFromJSON(previousState, () => {
+          canvas.renderAll();
+          canvas.isDrawingMode = tool === "pencil" || tool === "eraser";
+          canvas.freeDrawingBrush.width = strokeWidth;
+          canvas.freeDrawingBrush.color = tool === "eraser" ? "#ffffff" : color;
+          sendCanvasUpdate(canvas.toJSON());
+          setTimeout(() => setIsUpdating(false), 100);
+        });
+      } catch (error) {
+        console.error("Error during undo:", error);
+        setIsUpdating(false);
+      }
     }
   };
 
@@ -146,14 +180,19 @@ export const Whiteboard = () => {
     const nextState = redo();
     if (nextState) {
       setIsUpdating(true);
-      canvas.loadFromJSON(nextState, () => {
-        canvas.renderAll();
-        canvas.isDrawingMode = tool === "pencil" || tool === "eraser";
-        canvas.freeDrawingBrush.width = strokeWidth;
-        canvas.freeDrawingBrush.color = tool === "eraser" ? "#ffffff" : color;
-        sendCanvasUpdate(canvas.toJSON());
-        setTimeout(() => setIsUpdating(false), 100);
-      });
+      try {
+        canvas.loadFromJSON(nextState, () => {
+          canvas.renderAll();
+          canvas.isDrawingMode = tool === "pencil" || tool === "eraser";
+          canvas.freeDrawingBrush.width = strokeWidth;
+          canvas.freeDrawingBrush.color = tool === "eraser" ? "#ffffff" : color;
+          sendCanvasUpdate(canvas.toJSON());
+          setTimeout(() => setIsUpdating(false), 100);
+        });
+      } catch (error) {
+        console.error("Error during redo:", error);
+        setIsUpdating(false);
+      }
     }
   };
 
@@ -203,6 +242,7 @@ export const Whiteboard = () => {
     const canvas = fabricRef.current;
     canvas.clear();
     canvas.backgroundColor = "#ffffff";
+    canvas.renderAll();
     debounceCanvasUpdate(canvas);
   };
 

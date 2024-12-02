@@ -60,6 +60,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   receiveCanvasUpdate: (callback: (update: CanvasUpdate) => void) => {
     const socket = socketService.getSocket();
     if (socket) {
+      // Remove any existing listeners to prevent duplicates
+      socket.off("canvas:update");
+
       socket.on("canvas:update", (update: CanvasUpdate) => {
         if (update.sender !== get().clientId) {
           callback(update);
@@ -74,12 +77,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (socket) {
       socket.emit("canvas:open", {
         roomId: get().roomId,
+        sender: get().clientId,
       });
     }
   },
+
   receiveCanvasOpen: (callback: (update: CanvasUpdate) => void) => {
     const socket = socketService.getSocket();
     if (socket) {
+      // Remove any existing listeners to prevent duplicates
+      socket.off("canvas:open");
+
       socket.on("canvas:open", (update: CanvasUpdate) => {
         if (update.sender !== get().clientId) {
           callback(update);

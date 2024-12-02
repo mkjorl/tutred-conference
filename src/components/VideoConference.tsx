@@ -17,7 +17,7 @@ import { useScreenShareStore } from "../stores/screenShareStore";
 import { DraggableVideo } from "./DraggableVideo";
 import { Tooltip } from "./Tooltip";
 import AudioComponent from "./AudioTrack";
-import { useCanvasStore } from "../stores/canvasStore";
+import { useSocket } from "../hooks/useSocket";
 
 interface VideoConferenceProps {
   participantName: string;
@@ -30,6 +30,7 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
 }) => {
   const [egressId, setEgressId] = useState(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
+  const { sendOpenCanvas } = useSocket();
 
   const startRecording = async () => {
     console.log("Starting recording...");
@@ -86,7 +87,7 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
     toggleCodeEditor,
   } = useUIStore();
 
-  const { receiveCanvasOpen } = useCanvasStore();
+  const { receiveCanvasOpen } = useSocket();
 
   useEffect(() => {
     receiveCanvasOpen(() => {
@@ -220,7 +221,10 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
             show={showWhiteboardTooltip}
           >
             <button
-              onClick={toggleWhiteboard}
+              onClick={() => {
+                sendOpenCanvas();
+                toggleWhiteboard();
+              }}
               className={`p-3 rounded-lg ${
                 isWhiteboardVisible
                   ? "bg-green-500 hover:bg-green-600"
