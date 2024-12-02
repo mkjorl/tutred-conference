@@ -15,7 +15,6 @@ import { useUIStore } from "../stores/uiStore";
 import { useRoomStore } from "../stores/roomStore";
 import { useScreenShareStore } from "../stores/screenShareStore";
 import { DraggableVideo } from "./DraggableVideo";
-import { ScreenRecorder } from "./ScreenRecorder";
 import { Tooltip } from "./Tooltip";
 import AudioComponent from "./AudioTrack";
 import { useCanvasStore } from "../stores/canvasStore";
@@ -29,11 +28,45 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
   participantName,
   roomName,
 }) => {
-  const [showRecorder, setShowRecorder] = useState(false);
+  const [egressId, setEgressId] = useState(null);
   const [showWhiteboardTooltip, setShowWhiteboardTooltip] = useState(false);
 
+  const startRecording = async () => {
+    console.log("Starting recording...");
+    const response = await fetch(
+      import.meta.env.VITE_SIGNALING_SERVER + "/api/record-session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ roomName: roomName }),
+      }
+    );
+
+    const { egressId } = await response.json();
+    setEgressId(egressId);
+    console.log("Recording started!", egressId);
+  };
+
+  const stopRecording = async () => {
+    const response = await fetch(
+      import.meta.env.VITE_SIGNALING_SERVER + "/api/record-session",
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ egressId }),
+      }
+    );
+
+    setEgressId(null);
+    console.log("Recording stopped!");
+  };
+
   const {
-    room,
+    isRecording,
     localTrack,
     remoteTracks,
     connectionError,
@@ -130,14 +163,6 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
             </div>
           </div>
         )}
-
-        {showRecorder && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="w-96">
-              <ScreenRecorder onClose={() => setShowRecorder(false)} />
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="bg-gray-900/90 backdrop-blur-sm p-4 border-t border-gray-800">
@@ -179,8 +204,12 @@ export const VideoConference: React.FC<VideoConferenceProps> = ({
           </button>
 
           <button
-            onClick={() => setShowRecorder(true)}
-            className="p-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white transition-colors"
+            onClick={() => {
+              stopRecording();
+            }}
+            className={`p-3 rounded-lg  hover:bg-gray-700 text-white transition-colors ${
+              isRecording ? "bg-red-500" : "bg-gray-600"
+            }`}
             title="Screen Recording"
           >
             <CircleDot size={20} />

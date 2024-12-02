@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Video, Square, Download, X } from 'lucide-react';
-import RecordRTC from 'recordrtc';
+import React, { useState } from "react";
+import { Video, Square, Download, X } from "lucide-react";
+import RecordRTC from "recordrtc";
+import { useRoomStore } from "../stores/roomStore";
 
 interface ScreenRecorderProps {
   onClose: () => void;
@@ -10,31 +11,31 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({ onClose }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recorder, setRecorder] = useState<RecordRTC | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const { room } = useRoomStore();
 
   const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const newRecorder = new RecordRTC(stream, { type: 'video' });
-      newRecorder.startRecording();
-      setRecorder(newRecorder);
-      setIsRecording(true);
-    } catch (err) {
-      console.error('Error starting recording:', err);
-    }
+    console.log("Starting recording...");
+    const response = await fetch(
+      import.meta.env.VITE_SIGNALING_SERVER + "/api/record-session",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ roomName: room }),
+      }
+    );
+    console.log("Response:", response);
   };
 
   const stopRecording = () => {
     if (!recorder) return;
-    recorder.stopRecording(() => {
-      setRecordedBlob(recorder.getBlob());
-      setIsRecording(false);
-    });
   };
 
   const downloadRecording = () => {
     if (!recordedBlob) return;
     const url = URL.createObjectURL(recordedBlob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `recording-${Date.now()}.webm`;
     a.click();
@@ -49,7 +50,7 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({ onClose }) => {
           <X size={20} />
         </button>
       </div>
-      
+
       <div className="p-8 flex flex-col items-center space-y-6">
         <div className="flex space-x-4">
           {!isRecording ? (
@@ -69,7 +70,7 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({ onClose }) => {
               <span>Stop Recording</span>
             </button>
           )}
-          
+
           {recordedBlob && (
             <button
               onClick={downloadRecording}
@@ -80,7 +81,7 @@ export const ScreenRecorder: React.FC<ScreenRecorderProps> = ({ onClose }) => {
             </button>
           )}
         </div>
-        
+
         {isRecording && (
           <div className="flex items-center space-x-2 text-red-500">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />

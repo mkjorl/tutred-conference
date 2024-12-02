@@ -85,6 +85,7 @@ export const Whiteboard = () => {
 
     receiveCanvasUpdate((update) => {
       setIsUpdating(true);
+      console.log("received CanvasUpdate", update);
       canvas.loadFromJSON(update.data, () => {
         canvas.renderAll();
         setTimeout(() => setIsUpdating(false), 100);

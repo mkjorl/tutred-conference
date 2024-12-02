@@ -70,11 +70,10 @@ export const useSocket = create<SocketState>((set, get) => ({
 
   receiveCanvasUpdate: (callback: (update: CanvasUpdate) => void) => {
     const socket = socketService.getSocket();
-    console.log("receving canvas update", socket);
     if (socket) {
       socket.on("canvas:update", (update: CanvasUpdate) => {
-        console.log("receivedCanvasUpdate", update);
         if (update.sender !== get().clientId) {
+          console.log("receivedCanvasUpdate", update);
           callback(update);
           set({ lastUpdate: update.timestamp });
         }

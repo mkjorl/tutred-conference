@@ -14,7 +14,7 @@ import { useSocket } from "../hooks/useSocket";
 let APPLICATION_SERVER_URL = import.meta.env.VITE_SIGNALING_SERVER;
 let LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL;
 
-interface TrackInfo {
+export interface TrackInfo {
   trackPublication: RemoteTrackPublication;
   participantIdentity: string;
 }
@@ -25,6 +25,7 @@ interface RoomStore {
   remoteTracks: TrackInfo[];
   connectionError: string | null;
   isConnecting: boolean;
+  isRecording: boolean;
   joinRoom: (roomName: string, participantName: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   toggleVideo: () => Promise<void>;
@@ -36,6 +37,7 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
   room: undefined,
   localTrack: undefined,
   remoteTracks: [],
+  isRecording: false,
   connectionError: null,
   isConnecting: false,
 
@@ -124,6 +126,10 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
         }));
       }
     );
+    console.log("subscriptions");
+    room.on(RoomEvent.RecordingStatusChanged, (data: any) => {
+      console.log("metadata changed", data);
+    });
 
     room.on(
       RoomEvent.TrackUnsubscribed,
